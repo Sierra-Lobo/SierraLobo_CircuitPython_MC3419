@@ -5,77 +5,56 @@ circuitpython library for MC3419
 
 Caden H.
 """
-
+import time
 from micropython import const
 from adafruit_bus_device.i2c_device import I2CDevice
 from adafruit_register.i2c_bits import ROBits, RWBits
 from adafruit_register.i2c_bit import ROBit, RWBit
 from adafruit_register.i2c_struct import UnaryStruct
+from typing import Tuple
+
+_MC3419_ADDR_DEFAULT: int = const(0x0)
+_MC3419_WAKE = const(0x01)
+_MC3419_STBY = const(0x00)
+
+_MC3419_DEV_STAT_REG = const(0x05)
+_MC3419_MODE_REG = const(0x07)
+_MC3419_SR_REG = const(0x08)
+_MC3419_XOUT_L_REG = const(0x0D)
+_MC3419_STATUS_REG = const(0x13)
+_MC3419_RANGE_REG = const(0x20)
+_MC3419_RATE_2_REG = const(0x30)
 
 class MXC6655:
+    """Driver for the MMC5603 3-axis magnetometer."""
 
-    _sw_rst = RWBit(INT_1, 4)
-    _drdy = RWBit(INT_1, 0)
-    _ord = ROBit(STATUS, 4)
-    _xout_u = UnaryStruct(XOUT_U, "<B")
-    _xout_l = UnaryStruct(XOUT_L, "<B")
-    _yout_u = UnaryStruct(YOUT_U, "<B")
-    _yout_l = UnaryStruct(YOUT_L, "<B")
-    _zout_u = UnaryStruct(ZOUT_U, "<B")
-    _zout_l = UnaryStruct(ZOUT_L, "<B")
-    _tout = UnaryStruct(TOUT, "<B")
-    _pd = RWBit(CONTROL, 0)
-    _fsr = RWBits(2, CONTROL, 6)
-    _drdye = RWBit(INT_MASK1, 0)
-    _who_am_i = ROBit(WHO_AM_I, 0)
-
-    class _BAD_WHO_AM_I(Exception):
-        pass
+    _state_read = ROBits(2, _MC3419_DEV_STAT_REG, 0)
+    _state_write = RWBits(2, _MC3419_MODE_REG, 0)
+    _i2c_wdt = RWBits(2, _MC3419_MODE_REG, 4) # further testing with this may be required
+    _sr = UnaryStruct(_MC3419_SR_REG, "<B") # internal sample rate
+    _new_data = ROBit(_MC3419_STATUS_REG, 7)
+    _range = RWBits(3, _MC3419_RANGE_REG, 4)
+    _lpf_en = RWBit(_MC3419_RANGE_REG, 3)
+    _lpf_bw = RWBits(3, _MC3419_RANGE_REG, 0)
+    _dec_mode_rate = RWBits(4, _MC3419_RATE_2_REG, 0) #sets output data rate, 0x0 for = internal sample rate
 
     def __init__(self, i2c_bus, addr):
-        self.i2c_device = I2CDevice(i2c_bus, addr, probe=False)
-        if not self._who_am_i: raise self._BAD_WHO_AM_I("[ERROR][MXC6655][BAD WHO_AM_I VALUE]: " + str(self._who_am_i))
-        self.ON()
-    
-    def SLEEP(self):
-        self._pd = True
-
-    def ON(self): #no power adjustment paramaters for this chip, just on or off.
-        self._pd = False
-        self._fsr = 0 #1024 LSB/g
-        self._drdye = True
-
-    def reset(self):
-        self._sw_rst = True
+        pass
 
     @property
-    def read(self): #device self refreshes @ 100Hz
-        #adjust values to accel in g
-        out = self.read_raw
-        for meas in range(len(out)): #12b 2's complememt form, -2048 to 2048, 
-            if (out[meas]>>11 == 1): # if it is 2's convert it to neg
-                #flip all 12 bits and add 1
-                out[meas] = ((out[meas] ^ 0x0FFF) + 1) * (-1)
-            out[meas] = out[meas]/1024
-        return(out)
+    def wake(self) -> bool:
+        """
+        property for if the chip is in wake mode.
+            wake needs to be set true for the device to sample.
+            cannot write to any other registers besides mode when wake
+        """
+        return self._state_read == _MC3419_WAKE
 
-    
-    # read function returns touple of floats if it got data, None type otherwise., maybe make this FFFFFF or exact 0? idk since it is gonna be a float
-    @property
-    def read_raw(self): #device self refreshes @ 100Hz
-        x = (self._xout_u << 4) + (self._xout_l >> 4)
-        y = (self._yout_u << 4) + (self._yout_l >> 4)
-        z = (self._zout_u << 4) + (self._zout_l >> 4)
-        out = [x, y, z]
-        #reset drdy
-        self._drdy = False
-        return(out)
-
-    @property
-    def temp(self):
-        temp = self._tout #8b value =0 @ 25degC, 0.568degC/LSB
-        #do adjustment
-        if(temp>>7 == 1): #if 2's comp
-            temp = ((temp ^ 0xFF) + 1) * (-1)
-        temp = (temp * 0.568) + 25
-        return(temp)
+    @wake.setter
+    def wake(self, value: bool) -> None:
+        if value != self.wake:
+            if value:
+                self._state_write = _MC3419_WAKE
+            else:
+                self._state_write = _MC3419_STBY
+            
