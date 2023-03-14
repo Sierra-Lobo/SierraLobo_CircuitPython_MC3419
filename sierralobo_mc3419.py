@@ -25,10 +25,10 @@ _MC3419_RANGE_12G = const(0b011)
 _MC3419_RANGE_16G = const(0b100)
 
 _MC3419_SENS_2G = const(16384)
-_MC3419_SENS_4G = const(16384)
-_MC3419_SENS_8G = const(16384)
-_MC3419_SENS_12G = const(16384)
-_MC3419_SENS_16G = const(16384)
+_MC3419_SENS_4G = const(8192)
+_MC3419_SENS_8G = const(4096)
+_MC3419_SENS_12G = const(2730)
+_MC3419_SENS_16G = const(2048)
 
 _MC3419_BW_DIV4P255 = const(0b001)
 _MC3419_BW_DIV6 = const(0b010)
@@ -87,7 +87,7 @@ class MXC6655:
     def __init__(self, i2c_bus, address: int = _MC3419_ADDR_DEFAULT) -> None:
         self.i2c_device = I2CDevice(i2c_bus, address)
         if self._chip_id != _MC3419_CHIP_ID:
-            raise("Failed to find MMC5603.")
+            raise RuntimeError("Failed to find MMC5603 at address: {}".format(hex(address)))
         self.reset()
         self._buffer = bytearray(6)
 
@@ -100,7 +100,7 @@ class MXC6655:
         self.range = _MC3419_RANGE_2G
         self.lpf_bw = _MC3419_BW_DIV16
         self.lpf = True
-        self._i2c_wdt = 0b11
+        self._i2c_wdt = 0b11 # turn on WDT for high and low transitions
 
     @property
     def acceleration(self) -> Tuple[float, float, float]:
@@ -116,14 +116,14 @@ class MXC6655:
         y = self._buffer[3] << 8 | self._buffer[2] 
         z = self._buffer[5] << 8 | self._buffer[4]
         # fix center offsets
-        x -= 1 << 16
-        y -= 1 << 16
-        z -= 1 << 16
+        x -= 1 << 15
+        y -= 1 << 15
+        z -= 1 << 15
         # scale to g by LSB in datasheet
-        temp = self.sensitivity
-        x *= temp
-        y *= temp
-        z *= temp
+        sens = self.sensitivity
+        x /= sens
+        y /= sens
+        z /= sens
         return (x, y, z)
 
     @property
@@ -155,7 +155,7 @@ class MXC6655:
         if self.wake:
             raise RuntimeError("MC3419 range must be in STBY mode to set range")
         if not (0 <= value <= 4):
-            raise RuntimeError("MC3419 range must be between 0b000 and 0b100")
+            raise ValueError("MC3419 range must be between 0b000 and 0b100")
         self._range = value
 
     @property
@@ -163,16 +163,16 @@ class MXC6655:
         """MC3419 datasheet sensitivity units: LSB/g
         any better way to code this while keeping the const() declarations?
         if the const() is not used, these values will be held in RAM..."""
-        temp = self.range
-        if self.range == _MC3419_RANGE_2G:
+        rng = self.range
+        if rng == _MC3419_RANGE_2G:
             return _MC3419_SENS_2G
-        if self.range == _MC3419_RANGE_4G:
+        if rng == _MC3419_RANGE_4G:
             return _MC3419_SENS_4G
-        if self.range == _MC3419_RANGE_8G:
+        if rng == _MC3419_RANGE_8G:
             return _MC3419_SENS_8G
-        if self.range == _MC3419_RANGE_12G:
+        if rng == _MC3419_RANGE_12G:
             return _MC3419_SENS_12G
-        if self.range == _MC3419_RANGE_16G:
+        if rng == _MC3419_RANGE_16G:
             return _MC3419_SENS_16G
         
     @property
@@ -188,7 +188,7 @@ class MXC6655:
         if self.wake:
             raise RuntimeError("MC3419 must be in STBY mode to set IDR")
         if not (0 <= value <= 7):
-            raise RuntimeError("MC3419 idr must be between 0b000 and 0b111")
+            raise ValueError("MC3419 idr must be between 0b000 and 0b111")
         self._idr = value
 
     @property
@@ -205,7 +205,7 @@ class MXC6655:
         if self.wake:
             raise RuntimeError("MC3419 must be in STBY mode to set decimation")
         if not (0 <= value <= 15):
-            raise RuntimeError("MC3419 decimation must be between 0b0000 and 0b1111")
+            raise ValueError("MC3419 decimation must be between 0b0000 and 0b1111")
         self._dec = value
 
     @property
@@ -228,5 +228,5 @@ class MXC6655:
         if self.wake:
             raise RuntimeError("MC3419 must be in STBY mode to set LPF_BW")
         if not (1 <= value <= 3) or (value == 5):
-            raise RuntimeError("MC3419 LPF_BW must be between 0b001 to 0b011, or be equal to 0b101")
+            raise ValueError("MC3419 LPF_BW must be between 0b001 to 0b011, or be equal to 0b101")
         self._lpf_bw = value
