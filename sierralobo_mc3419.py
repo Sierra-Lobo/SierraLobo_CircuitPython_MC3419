@@ -10,11 +10,12 @@ from micropython import const
 from adafruit_bus_device.i2c_device import I2CDevice
 from adafruit_register.i2c_bits import ROBits, RWBits
 from adafruit_register.i2c_bit import ROBit, RWBit
-from adafruit_register.i2c_struct import ROUnaryStruct
+from adafruit_register.i2c_struct import UnaryStruct, ROUnaryStruct
 from typing import Tuple
 
 _MC3419_ADDR_DEFAULT: int = const(0x0)
-_MC3419_CHIP_ID = (0xA4)
+_MC3419_CHIP_ID = const(0xA4)
+_MC3419_RESET = const(0x40)
 _MC3419_STATE_WAKE = const(0b01)
 _MC3419_STATE_STBY = const(0b00)
 
@@ -62,6 +63,7 @@ _MC3419_DEC_500 = const(0b1110)
 _MC3419_DEC_1000 = const(0b1111)
 
 _MC3419_CHIP_ID_REG = const(0x18)
+_MC3419_RESET_REG = const(0x1C)
 _MC3419_DEV_STAT_REG = const(0x05)
 _MC3419_MODE_REG = const(0x07)
 _MC3419_SR_REG = const(0x08)
@@ -73,12 +75,12 @@ _MC3419_RATE_2_REG = const(0x30)
 class MXC6655:
     """Driver for the MMC5603 3-axis magnetometer."""
 
-    _chip_id = ROUnaryStruct(_MC3419_CHIP_ID)
+    _chip_id = ROUnaryStruct(_MC3419_CHIP_ID_REG)
+    _reset = UnaryStruct(_MC3419_CHIP_ID_REG)
     _state_read = ROBits(2, _MC3419_DEV_STAT_REG, 0)
     _state_write = RWBits(2, _MC3419_MODE_REG, 0)
-    _i2c_wdt = RWBits(2, _MC3419_MODE_REG, 4) # further testing with this may be required
+    #_i2c_wdt = RWBits(2, _MC3419_MODE_REG, 4) # further testing with this may be required
     _idr = RWBits(3, _MC3419_SR_REG, 0) # internal sample rate
-    _new_data = ROBit(_MC3419_STATUS_REG, 7)
     _range = RWBits(3, _MC3419_RANGE_REG, 4)
     _lpf_en = RWBit(_MC3419_RANGE_REG, 3)
     _lpf_bw = RWBits(3, _MC3419_RANGE_REG, 0)
@@ -95,6 +97,9 @@ class MXC6655:
         """Reset the sensor to the default state set by the library"""
         if self.wake: # if WAKE, put self into STBY
             self.wake = False
+        self._reset = _MC3419_RESET 
+        while self._reset == _MC3419_RESET:
+            time.sleep(0.005)
         self.idr = _MC3419_IDR_500Hz
         self.dec = _MC3419_DEC_1000
         self.range = _MC3419_RANGE_2G
