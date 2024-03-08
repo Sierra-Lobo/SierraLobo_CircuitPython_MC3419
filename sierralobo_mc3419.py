@@ -7,10 +7,10 @@
 * Affiliation(s): Sierra Lobo, Inc.
 
 * Repo Link: https://github.com/Sierra-Lobo/SierraLobo_CircuitPython_MC3419
-* MC3419 Datasheet Link: 
+* MC3419 Datasheet Link:
     https://www.memsic.com/Public/Uploads/uploadfile/files/20220615/MC3419Datasheet(APS-048-0071v1.2).pdf
 
-    
+
 Implementation Notes:
 
     Chip Capabilities Implemented:
@@ -19,11 +19,11 @@ Implementation Notes:
         * Range setting 2-16g
         * Data rate setting 0.5-1000Hz
         * LPF (only fc = idr/4)
-       
-    Unimplemented: 
+
+    Unimplemented:
         * SPI Interface
         * Device interrupts
-        * FIFO        
+        * FIFO
         * Gesture Detection
         * LPF other than fc = IDR/4
 """
@@ -34,7 +34,7 @@ from micropython import const
 from adafruit_bus_device.i2c_device import I2CDevice
 from adafruit_register.i2c_bits import ROBits, RWBits
 from adafruit_register.i2c_bit import ROBit, RWBit
-from adafruit_register.i2c_struct import UnaryStruct, ROUnaryStruct
+from adafruit_register.i2c_struct import ROUnaryStruct
 
 try:
     from typing import Tuple
@@ -100,7 +100,7 @@ _MC3419_DECIM_OPTS = (
     const(1000),
 )
 
-
+# pylint: disable=too-many-instance-attributes
 class MC3419:
     """Driver for the MMC3419 3-axis accelerometer."""
 
@@ -115,18 +115,22 @@ class MC3419:
     _dec = RWBits(4, _MC3419_RATE_2_REG, 0)
     _new_data = ROBit(_MC3419_STATUS_REG, 7)
 
-    def __init__(self, i2c_bus : I2C, address: int) -> None:
+    def __init__(self, i2c_bus: I2C, address: int) -> None:
         """class for MC3419 accelerometer"""
         self.i2c_device = I2CDevice(i2c_bus, address)
         if self._chip_id != _MC3419_CHIP_ID:
-            raise RuntimeError("Invalid Chip ID: {}, expected {}".format(hex(self._chip_id), hex(_MC3419_CHIP_ID)))
+            raise RuntimeError(
+                "Invalid Chip ID: {}, expected {}".format(
+                    hex(self._chip_id), hex(_MC3419_CHIP_ID)
+                )
+            )
         self._buffer = bytearray(6)
         self.reset()
 
     def reset(self) -> None:
         """Reset the sensor to the default state set by the library"""
         self.wake = False
-        self._reset = True 
+        self._reset = True
         time.sleep(0.010)
         self.range = 2
         self.data_rate = 2
@@ -166,14 +170,14 @@ class MC3419:
         with self.i2c_device as i2c:
             i2c.write_then_readinto(self._buffer, self._buffer, out_end=1)
 
-        x = unpack_from('<h', self._buffer, 0)[0]
-        y = unpack_from('<h', self._buffer, 2)[0]
-        z = unpack_from('<h', self._buffer, 4)[0]
+        x = unpack_from("<h", self._buffer, 0)[0]
+        y = unpack_from("<h", self._buffer, 2)[0]
+        z = unpack_from("<h", self._buffer, 4)[0]
 
-        print (x,y,z)
+        print(x, y, z)
 
         if change:
-            self.wake=False
+            self.wake = False
 
         return (x, y, z)
 
@@ -223,7 +227,7 @@ class MC3419:
             change = bool(self.wake)  # mode must be 'stby' to change configuration
             if change:
                 self.wake = False
-            self._range = i # write range
+            self._range = i  # write range
             if change:
                 self.wake = True
 
@@ -236,7 +240,7 @@ class MC3419:
         return self._idr / self._dec
 
     @data_rate.setter
-    def data_rate(self, rate_hz: float, tol_hz : float = .25) -> None:
+    def data_rate(self, rate_hz: float, tol_hz: float = 0.25) -> None:
         """set the update rate of the sensor
 
         mildly overcomplicated
@@ -265,8 +269,8 @@ class MC3419:
         if change:
             self.wake = False  # mode must be 'stby' to change configuration
 
-        self._idr = _MC3419_IDR_OPTS.index(idr) # write idr
-        self._dec = _MC3419_DECIM_OPTS.index(dec) # write dec
+        self._idr = _MC3419_IDR_OPTS.index(idr)  # write idr
+        self._dec = _MC3419_DECIM_OPTS.index(dec)  # write dec
 
         if change:
             self.wake = True
@@ -293,7 +297,7 @@ class MC3419:
 
 def _find_dec(rate_target: float, idr: float):
     """find best decimation value at a given idr"""
-    best_dec =  idr / rate_target
+    best_dec = idr / rate_target
     for i in range(len(_MC3419_DECIM_OPTS) - 1):  # find decimator value at idr
         if _MC3419_DECIM_OPTS[i] <= best_dec <= _MC3419_DECIM_OPTS[i + 1]:
             dif0 = abs(rate_target - idr / _MC3419_DECIM_OPTS[i])
