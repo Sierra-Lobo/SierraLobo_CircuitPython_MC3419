@@ -47,7 +47,7 @@ _MC3419_ADDR_DEFAULT = const(0x0)
 _MC3419_CHIP_ID = const(0xA4)
 _MC3419_STATE_WAKE = const(0x01)
 _MC3419_STATE_STBY = const(0x0)
-_MC3419_BITS = const(2**15)  # signed (so not 16)
+_MC3419_BITS =  2**15  # signed (so not 16)
 
 # Device Registers
 _MC3419_DEV_STAT_REG = const(0x05)
@@ -73,7 +73,7 @@ _MC3419_IDR_OPTS = (
     # 3 bits, in order of device register settings
     const(25),
     const(50),
-    const(62.5),
+    62.5,
     const(100),
     const(125),
     const(250),
